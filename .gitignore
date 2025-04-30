@@ -1,0 +1,16 @@
+﻿
+# Build artifacts
+bin/
+obj/
+
+# SQLite DB
+*.db
+*.db-shm
+*.db-wal
+
+# VS/IDE
+*.user
+*.suo
+
+# HTTP test files
+*.http
