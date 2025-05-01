@@ -1,4 +1,4 @@
-﻿
+﻿.vs/
 # Build artifacts
 bin/
 obj/
@@ -14,3 +14,4 @@ obj/
 
 # HTTP test files
 *.http
+Log/

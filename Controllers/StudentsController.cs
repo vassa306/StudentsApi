@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Primitives;
 using studentsapi.Data;
+using studentsapi.Data.Repository;
 using studentsapi.DTO;
 using studentsapi.Logging;
 using studentsapi.Model;
+using Student = studentsapi.Data.Student;
 
 namespace studentsapi.Controllers
 {
@@ -14,15 +16,16 @@ namespace studentsapi.Controllers
 
     public class StudentsController : ControllerBase
     {
-        private readonly CollegeDBContext _context;
+        
         private readonly ILogger<StudentsController> _logger;
         private readonly IMapper _mapper;
-        
-        public StudentsController(ILogger<StudentsController> logger, CollegeDBContext context, IMapper mapper)
+        private readonly IStudentRepository _studentRepository;
+
+        public StudentsController(ILogger<StudentsController> logger, IMapper mapper, IStudentRepository studentRepository)
         {
-            _context = context;
             _logger = logger;
             _mapper = mapper;
+            _studentRepository = studentRepository;
         }
 
         [HttpGet]
@@ -39,13 +42,8 @@ namespace studentsapi.Controllers
                 return StatusCode(StatusCodes.Status406NotAcceptable, "Media type is not supported");
             }
             _logger.LogInformation("GetStudents method called.");
-            var students = await _context.Students.ToListAsync();
+            var students = _studentRepository.GetAllAsync();
             var studentDtos = _mapper.Map<List<StudentDto>>(students);
-
-            if (!students.Any())
-            {
-                return NotFound("No students found.");
-            }
             return Ok(studentDtos);
         }
 
@@ -62,11 +60,7 @@ namespace studentsapi.Controllers
                 _logger.LogCritical($"Student not found with {id}");
                 return BadRequest("Invalid student ID.");
             }
-            var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == id);
-            if (student == null)
-            {
-                return NotFound("No students found.");
-            }
+            var student = _studentRepository.GetByIdAsync(id);
             var studentDto = _mapper.Map<StudentDto>(student);
             return Ok(studentDto);
         }
@@ -78,7 +72,7 @@ namespace studentsapi.Controllers
             {
                 return BadRequest("Invalid student name.");
             }
-            var student = await _context.Students.FirstOrDefaultAsync(s => s.Name == name);
+            var student = _studentRepository.GetByName(name);
             var studentDto = _mapper.Map<StudentDto>(student);
             
             if (string.IsNullOrEmpty(studentDto.Name) || string.IsNullOrEmpty(studentDto.Email) || string.IsNullOrEmpty(studentDto.Address))
@@ -112,23 +106,16 @@ namespace studentsapi.Controllers
             {
                 return BadRequest("Name is required.");
             }
-            var existing = await _context.Students
-                .FirstOrDefaultAsync(s => s.Email == model.Email);
-
-
+            var existing = _studentRepository.Exists(model);
             if (existing != null)
             {
                 _logger.LogWarning("Student with email {Email} already exists.", model.Email);
                 return Conflict(new { message = "A student with this email already exists." });
             }
 
-            int newId = await _context.Students.MaxAsync(s => s.Id) + 1; // Generate new ID
-
+            int newId = await _studentRepository.IncreaseId(); // Generate new ID
             Data.Student student = _mapper.Map<Data.Student>(model);
-
-            await _context.Students.AddAsync(student);
-            await _context.SaveChangesAsync();
-
+            await _studentRepository.CreateAsync(student);
             model.Id = newId;
 
             return CreatedAtRoute("GetStudentById", new { id = model.Id }, model);
@@ -146,17 +133,14 @@ namespace studentsapi.Controllers
             {
                 BadRequest();
             }
-            var existingStudent = await _context.Students.Where(s => s.Id == model.Id).FirstOrDefaultAsync();
+            var existingStudent = _studentRepository.GetByIdAsync(model.Id);
             if (existingStudent == null)
             {
                 _logger.LogCritical($"Student not found with ID {model.Id}");
                 return NotFound();
             }
-            existingStudent.Name = model.Name;
-            existingStudent.Email = model.Email;
-            existingStudent.Address = model.Address;
-
-            await _context.SaveChangesAsync();
+            var newRecord = _mapper.Map<Student>(model);
+            await _studentRepository.UpdateAsync(newRecord);
             return NoContent();
         }
 
@@ -172,21 +156,18 @@ namespace studentsapi.Controllers
             {
                 return BadRequest();
             }
-            var existingStudent = await _context.Students.FirstOrDefaultAsync(s => s.Id == id);
+            var existingStudent = await _studentRepository.GetByIdAsync(id);
             if (existingStudent == null)
             {
                 _logger.LogCritical($"Student not found with ID {id}");
                 return NotFound();
             }
+
             var studentDto = _mapper.Map<StudentDto>(existingStudent);
             patchDoc.ApplyTo(studentDto, ModelState);
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
+            existingStudent = _mapper.Map<Student>(studentDto);
+            await _studentRepository.UpdateAsync(existingStudent);
 
-            _mapper.Map(studentDto, existingStudent);
-            await _context.SaveChangesAsync();
             return NoContent();
         }
 
@@ -200,9 +181,8 @@ namespace studentsapi.Controllers
                 _logger.LogCritical("Invalid Student ID");
                 return BadRequest("Invalid student ID.");
             }
-            var stud = await _context.Students.Where(n => n.Id == id).FirstOrDefaultAsync();
-            _context.Students.Remove(stud);
-            await _context.SaveChangesAsync();
+            var stud = await _studentRepository.GetByIdAsync(id);
+            await _studentRepository.DeleteAsync(id);
             return NoContent();
         }
     }
