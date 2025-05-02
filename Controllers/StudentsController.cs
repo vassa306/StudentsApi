@@ -136,7 +136,12 @@ namespace studentsapi.Controllers
             _logger.LogInformation("UpdateStudent method called.");
             if (model == null || model.Id <= 0)
             {
-                BadRequest();
+                return BadRequest();
+            }
+            if (!ModelState.IsValid)
+            {
+                _logger.LogCritical($"Model state is invalid {model}");
+                return BadRequest(ModelState);
             }
             var existingStudent = await _studentRepository.GetByIdAsync(model.Id);
             if (existingStudent == null)

@@ -42,7 +42,7 @@ namespace studentsapi.Tests
 
         [Test]
         // Add this using directive to resolve 'UseInMemoryDatabase' extension method.
-        public async Task GetStudents_ReturnsAllStudents()
+        public async Task GetStudents_ReturnsAllStudentsTest()
         {
             var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             // Act  
@@ -58,6 +58,7 @@ namespace studentsapi.Tests
             Assert.That(students, Is.Not.Null);
             Assert.That(students.Count(), Is.EqualTo(2));
             Assert.That(students.First().Id, Is.EqualTo(1));
+            _studentRepoMock.Verify(repo => repo.GetAllAsync(), Times.Once);
         }
 
         [Test]
@@ -78,12 +79,13 @@ namespace studentsapi.Tests
             Assert.That(students, Is.Not.Null);
             Assert.That(students.Count(), Is.EqualTo(2));
             Assert.That(students.First().Id, Is.EqualTo(1));
+            _studentRepoMock.Verify(repo => repo.GetAllAsync(), Times.Once);
         }
 
         [Test]
         public async Task GetStudents_ReturnsAllStudentsText()
         {
-            var controller = TestDataHelper.CreateStudentsControllerInvalidHeaders(_logger,_mapper, _studentRepoMock);
+            var controller = TestDataHelper.CreateStudentsControllerInvalidHeaders(_logger, _mapper, _studentRepoMock);
             // Ensure this is included for InMemory database support
             // Act  
             var result = await controller.GetStudents();
@@ -92,6 +94,8 @@ namespace studentsapi.Tests
             var statusCodeResult = result.Result as ObjectResult;
             Assert.That(statusCodeResult, Is.Not.Null);
             Assert.That(statusCodeResult.StatusCode, Is.EqualTo(StatusCodes.Status406NotAcceptable));
+            Assert.That(statusCodeResult.Value, Is.EqualTo("Media type is not supported"));
+
         }
 
         [Test]
@@ -104,8 +108,10 @@ namespace studentsapi.Tests
             var okResult = result.Result as OkObjectResult;
             Assert.That(okResult, Is.Not.Null);
             var student = okResult.Value as StudentDto;
+            _studentRepoMock.Verify(repo => repo.GetByName(It.IsAny<string>()), Times.Once);
             Assert.That(student, Is.Not.Null);
             Assert.That(student.Name, Is.EqualTo("John"));
+
         }
 
         [Test]
@@ -119,6 +125,7 @@ namespace studentsapi.Tests
             var okResult = result.Result as OkObjectResult;
             Assert.That(okResult, Is.Not.Null);
             var student = okResult.Value as StudentDto;
+            _studentRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<int>()), Times.Once);
             Assert.That(student, Is.Not.Null);
             Assert.That(student.Name, Is.EqualTo("John"));
         }
@@ -191,7 +198,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task CreateUserTestWithInvalidData()
         {
-            var controller = TestDataHelper.CreateStudentsController(_logger,_mapper, _studentRepoMock);    
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             var studentDto = TestDataHelper.CreateStudentDtoInvalid();
             ModelValidationHelper.ValidateModelState(controller, studentDto);
             var result = await controller.CreateStudent(studentDto);
@@ -304,6 +311,63 @@ namespace studentsapi.Tests
             var badRequestResult = result.Result as BadRequestObjectResult;
             Assert.That(badRequestResult, Is.Not.Null, "BadRequestObjectResult was unexpectedly null.");
             _logger.LogInformation("BadRequestObjectResult: {0}", badRequestResult.Value);
+        }
+
+        [Test]
+        public async Task CreateUserWithExistingEmail()
+        {
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
+            var studentDto = TestDataHelper.CreateStudentDtoWithExistingEmail();
+            ModelValidationHelper.ValidateModelState(controller, studentDto);
+            var result = await controller.CreateStudent(studentDto);
+            // Assert
+            Assert.That(result.Result, Is.InstanceOf<ConflictObjectResult>(), "Expected ConflictObjectResult");
+            // Safe cast
+            var ConflictResult = result.Result as ConflictObjectResult;
+            Assert.That(ConflictResult, Is.Not.Null, "BadRequestObjectResult was unexpectedly null.");
+            _logger.LogInformation("ConflictResult: {0}", ConflictResult.Value);
+        }
+        [Test]
+        public async Task UpdateUserTest()
+        {
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
+            var studentDto = TestDataHelper.GetExistingDto();
+            var result = await controller.UpdateStudent(studentDto.Id, studentDto);
+            // Assert
+            Assert.That(result, Is.InstanceOf<NoContentResult>(), "Expected NoContentResult.");
+            _studentRepoMock.Verify(repo => repo.UpdateAsync(It.Is<Data.Student>(
+    s => s.Id == studentDto.Id &&
+         s.Name == studentDto.Name &&
+         s.Email == studentDto.Email &&
+         s.Address == studentDto.Address
+)), Times.Once);
+        }
+
+        [Test]
+        public async Task UpdateUserTestWithInvalidData()
+        {
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
+            var studentDto = TestDataHelper.GetExistingDto();
+            studentDto.Name = null; // Invalid
+
+            ModelValidationHelper.ValidateModelState(controller, studentDto);
+
+            // Act
+            var result = await controller.UpdateStudent(studentDto.Id, studentDto);
+
+            // Assert
+            Assert.That(result, Is.InstanceOf<BadRequestObjectResult>(), "Expected BadRequest due to invalid model.");
+            var badRequestResult = result as BadRequestObjectResult;
+            Assert.That(badRequestResult, Is.Not.Null, "BadRequestObjectResult was unexpectedly null.");
+            var errors = badRequestResult.Value as SerializableError;
+            Assert.That(errors, Is.Not.Null, "ModelState was not returned.");
+            Assert.That(errors.ContainsKey("Name"), "Missing validation error for Name.");
+            var errorMessages = errors["Name"] as string[];
+            Assert.That(errorMessages, Is.Not.Null.And.Not.Empty, "Error messages for Name were unexpectedly null or empty.");
+            Assert.That(errorMessages[0], Is.EqualTo("The Name field is required."), "Unexpected error message for Name.");
+
+            // Ensure that update was never called
+            _studentRepoMock.Verify(repo => repo.UpdateAsync(It.IsAny<Data.Student>()), Times.Never);
         }
     }
     

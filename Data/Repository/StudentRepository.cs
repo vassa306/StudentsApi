@@ -41,7 +41,8 @@ namespace studentsapi.Data.Repository
         }
 
         public async Task<int> CreateAsync(Student student)
-        {
+        { 
+            
             _context.Students.Add(student);
             await _context.SaveChangesAsync();
             return student.Id;

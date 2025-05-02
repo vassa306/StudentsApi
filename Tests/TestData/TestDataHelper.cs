@@ -6,6 +6,8 @@ using studentsapi.DTO;
 using AutoMapper;
 using studentsapi.Data.Repository;
 using Moq;
+using System.Net;
+using System.Xml.Linq;
 
 namespace studentsapi.Tests.TestData
 {
@@ -99,6 +101,7 @@ namespace studentsapi.Tests.TestData
             };
         }
 
+
         public static StudentDto CreateStudentDtoInvalidEmail(string email = "martingmail.com", string address = "124 Main St")
         {
             return new StudentDto
@@ -140,6 +143,28 @@ namespace studentsapi.Tests.TestData
         public static StudentDto? CreateStudentDtoNull()
         {
             return null;
+        }
+
+        internal static StudentDto CreateStudentDtoWithExistingEmail(string name = "Vasik", string email = "john@email.com", string address = "123 Main St")
+        {
+            return new StudentDto
+            {
+                
+                Name = name,
+                Email = email,
+                Address = address
+            };
+        }
+
+        internal static StudentDto? GetExistingDto(int id = 1 ,string name = "John", string email = "john@email.com", string address = "123 Main St" )
+        {
+            return new StudentDto
+            {
+                Id = id,
+                Name = name,
+                Email = email,
+                Address = address
+            };
         }
     }
 }
