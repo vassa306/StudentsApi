@@ -42,7 +42,7 @@ namespace studentsapi.Controllers
                 return StatusCode(StatusCodes.Status406NotAcceptable, "Media type is not supported");
             }
             _logger.LogInformation("GetStudents method called.");
-            var students = _studentRepository.GetAllAsync();
+            var students = await _studentRepository.GetAllAsync();
             var studentDtos = _mapper.Map<List<StudentDto>>(students);
             return Ok(studentDtos);
         }
@@ -60,7 +60,12 @@ namespace studentsapi.Controllers
                 _logger.LogCritical($"Student not found with {id}");
                 return BadRequest("Invalid student ID.");
             }
-            var student = _studentRepository.GetByIdAsync(id);
+            var student = await _studentRepository.GetByIdAsync(id);
+            if (student == null)
+            {
+                _logger.LogCritical($"Student not found with {id}");
+                return NotFound("No students found.");
+            }
             var studentDto = _mapper.Map<StudentDto>(student);
             return Ok(studentDto);
         }
@@ -72,7 +77,7 @@ namespace studentsapi.Controllers
             {
                 return BadRequest("Invalid student name.");
             }
-            var student = _studentRepository.GetByName(name);
+            var student = await _studentRepository.GetByName(name);
             var studentDto = _mapper.Map<StudentDto>(student);
             
             if (string.IsNullOrEmpty(studentDto.Name) || string.IsNullOrEmpty(studentDto.Email) || string.IsNullOrEmpty(studentDto.Address))
@@ -106,7 +111,7 @@ namespace studentsapi.Controllers
             {
                 return BadRequest("Name is required.");
             }
-            var existing = _studentRepository.Exists(model);
+            var existing = await _studentRepository.Exists(model);
             if (existing != null)
             {
                 _logger.LogWarning("Student with email {Email} already exists.", model.Email);
@@ -133,7 +138,7 @@ namespace studentsapi.Controllers
             {
                 BadRequest();
             }
-            var existingStudent = _studentRepository.GetByIdAsync(model.Id);
+            var existingStudent = await _studentRepository.GetByIdAsync(model.Id);
             if (existingStudent == null)
             {
                 _logger.LogCritical($"Student not found with ID {model.Id}");

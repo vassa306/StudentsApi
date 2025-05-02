@@ -28,7 +28,7 @@ namespace studentsapi.Data.Repository
             return await _context.Students.Where(student => student.Name.ToLower().Equals(name.ToLower())).FirstOrDefaultAsync();
         }
 
-        public async Task<int> UpdateAsync(StudentDto student)
+        public async Task<int> UpdateAsync(Student student)
         {
             var studentToUpdate = await _context.Students.Where(student => student.Id == student.Id).FirstOrDefaultAsync();
             if (studentToUpdate == null)

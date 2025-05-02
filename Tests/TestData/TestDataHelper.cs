@@ -4,6 +4,8 @@ using Serilog;
 using Microsoft.AspNetCore.Mvc;
 using studentsapi.DTO;
 using AutoMapper;
+using studentsapi.Data.Repository;
+using Moq;
 
 namespace studentsapi.Tests.TestData
 {
@@ -17,16 +19,44 @@ namespace studentsapi.Tests.TestData
                 return;
                 // Seed data
             }
-                context.Students.AddRange(
-                    new Student { Id = 1, Name = "John", Email = "john@email.com", Address = "123 Main St" },
-                    new Student { Id = 2, Name = "Kate", Email = "kate@email.com", Address = "456 Elm St" });
-                context.SaveChanges();
-                Log.Information("Database seeded with test data.");
-        
+            context.Students.AddRange(
+                new Student { Id = 1, Name = "John", Email = "john@email.com", Address = "123 Main St" },
+                new Student { Id = 2, Name = "Kate", Email = "kate@email.com", Address = "456 Elm St" });
+            context.SaveChanges();
+            Log.Information("Database seeded with test data.");
         }
-        public static StudentsController CreateStudentsController(ILogger<StudentsController> logger, CollegeDBContext context, IMapper mapper)
+
+        public static void SeedStudentsMock(Mock<IStudentRepository> mockRepository)
         {
-            var controller = new StudentsController(logger, context, mapper);
+            var students = new List<Student>
+        {
+            new Student { Id = 1, Name = "John", Email = "john@email.com", Address = "123 Main St" },
+            new Student { Id = 2, Name = "Kate", Email = "kate@email.com", Address = "456 Elm St" }
+        };
+            mockRepository.Setup(repo => repo.GetAllAsync())
+          .ReturnsAsync(students);
+
+            mockRepository.Setup(repo => repo.GetByIdAsync(It.IsAny<int>()))
+                .Returns((int id) => Task.FromResult(students.FirstOrDefault(s => s.Id == id)));
+
+            mockRepository.Setup(repo => repo.GetByName(It.IsAny<string>()))
+                .Returns((string name) => Task.FromResult(students.FirstOrDefault(s => s.Name == name)));
+
+            mockRepository.Setup(repo => repo.Exists(It.IsAny<StudentDto>()))
+                .Returns((StudentDto dto) => Task.FromResult(students.FirstOrDefault(s => s.Email == dto.Email)));
+
+            mockRepository.Setup(repo => repo.IncreaseId())
+                .ReturnsAsync(students.Max(s => s.Id) + 1);
+
+            mockRepository.Setup(repo => repo.CreateAsync(It.IsAny<Student>()))
+                .Callback<Student>(student => students.Add(student))
+                .ReturnsAsync((Student student) => student.Id);
+        }
+        
+
+        public static StudentsController CreateStudentsController(ILogger<StudentsController> logger, IMapper mapper, Mock<IStudentRepository> mockRepository)
+        {
+            var controller = new StudentsController(logger, mapper, mockRepository.Object);
 
             controller.ControllerContext = new ControllerContext
             {
@@ -37,10 +67,10 @@ namespace studentsapi.Tests.TestData
             return controller;
         }
 
-        public static StudentsController CreateStudentsControllerInvalidHeaders(ILogger<StudentsController> logger, CollegeDBContext context, IMapper mapper
-            )
+        public static StudentsController CreateStudentsControllerInvalidHeaders(ILogger<StudentsController> logger,IMapper mapper, Mock<IStudentRepository> mockRepository)
+            
         {
-            var controller = new StudentsController(logger, context, mapper);
+            var controller = new StudentsController(logger, mapper, mockRepository.Object);
 
             controller.ControllerContext = new ControllerContext
             {

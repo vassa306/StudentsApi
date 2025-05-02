@@ -2,10 +2,12 @@
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using NUnit.Framework;
 using studentsapi.Configurations;
 using studentsapi.Controllers;
 using studentsapi.Data;
+using studentsapi.Data.Repository;
 using studentsapi.DTO;
 using studentsapi.Logging;
 using studentsapi.Model;
@@ -23,6 +25,8 @@ namespace studentsapi.Tests
 
         private IMapper _mapper;
 
+        private Mock<IStudentRepository> _studentRepoMock;
+
         [SetUp]
         public void Setup()
         {
@@ -32,15 +36,15 @@ namespace studentsapi.Tests
             });
 
             _mapper = config.CreateMapper();
+            _studentRepoMock = new Mock<IStudentRepository>();
+            TestDataHelper.SeedStudentsMock(_studentRepoMock);
         }
 
         [Test]
         // Add this using directive to resolve 'UseInMemoryDatabase' extension method.
         public async Task GetStudents_ReturnsAllStudents()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
-
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             // Act  
             var result = await controller.GetStudents();
 
@@ -59,8 +63,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task GetStudents_ReturnsAllStudentsXml()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
 
             // Act  
             var result = await controller.GetStudents();
@@ -80,8 +83,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task GetStudents_ReturnsAllStudentsText()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsControllerInvalidHeaders(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsControllerInvalidHeaders(_logger,_mapper, _studentRepoMock);
             // Ensure this is included for InMemory database support
             // Act  
             var result = await controller.GetStudents();
@@ -95,8 +97,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task GetStudentByName()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             var result = await controller.GetStudentByName("John");
             // Assert
             Assert.That(result.Result, Is.InstanceOf<OkObjectResult>());
@@ -110,8 +111,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task GetStudentById()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             // Act
             var result = await controller.GetStudent(1);
             // Assert
@@ -126,10 +126,9 @@ namespace studentsapi.Tests
         [Test]
         public async Task GetStudentById_ReturnsNotFound()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             // Act
-            var maxId = context.Students.Max(s => s.Id) + 1; // Get a non-existing ID
+            var maxId = 999; // Get a non-existing ID
             Console.WriteLine($"MaxId: {maxId}");
             var result = await controller.GetStudent(maxId);
             // Assert
@@ -142,8 +141,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task GetStudentById_ReturnsBadRequest()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             // Act
             var result = await controller.GetStudent(0);
             // Assert
@@ -155,8 +153,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task GetStudentById_ReturnsBadRequestNegativeId()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             // Act
             var result = await controller.GetStudent(-1);
             // Assert
@@ -168,33 +165,33 @@ namespace studentsapi.Tests
         [Test]
         public async Task CreateUserTest()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
 
             StudentDto studentDto = TestDataHelper.CreateStudentDto();
             var result = await controller.CreateStudent(studentDto);
             // Assert
             Assert.That(result.Result, Is.InstanceOf<CreatedAtRouteResult>());
+
             var createdAtRouteResult = result.Result as CreatedAtRouteResult;
             Assert.That(createdAtRouteResult, Is.Not.Null);
+
             var createdStudent = createdAtRouteResult.Value as StudentDto;
             Assert.That(createdStudent, Is.Not.Null);
             Assert.That(createdStudent.Name, Is.EqualTo(studentDto.Name));
             Assert.That(createdStudent.Email, Is.EqualTo(studentDto.Email));
             Assert.That(createdStudent.Address, Is.EqualTo(studentDto.Address));
             Assert.That(createdStudent.Id, Is.GreaterThan(0));
-            var studentInDb = await context.Students.FindAsync(createdStudent.Id);
-            Assert.That(studentInDb, Is.Not.Null);
-            Assert.That(studentInDb.Name, Is.EqualTo(studentDto.Name));
-            Assert.That(studentInDb.Email, Is.EqualTo(studentDto.Email));
-            Assert.That(studentInDb.Address, Is.EqualTo(studentDto.Address));
+            Console.WriteLine($"Created student ID: {createdStudent.Id} , {createdStudent.Name}, {createdStudent.Address}");
+            // Optional: ověření, že mock skutečně zavolal CreateAsync
+            _studentRepoMock.Verify(r => r.CreateAsync(It.Is<Data.Student>(
+                s => s.Email == studentDto.Email && s.Name == studentDto.Name)), Times.Once);
         }
+
 
         [Test]
         public async Task CreateUserTestWithInvalidData()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger,_mapper, _studentRepoMock);    
             var studentDto = TestDataHelper.CreateStudentDtoInvalid();
             ModelValidationHelper.ValidateModelState(controller, studentDto);
             var result = await controller.CreateStudent(studentDto);
@@ -212,8 +209,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task CreateInvalidUserEmail()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             var studentDto = TestDataHelper.CreateStudentDtoInvalidEmail();
             ModelValidationHelper.ValidateModelState(controller, studentDto);
             var result = await controller.CreateStudent(studentDto);
@@ -232,8 +228,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task CreateInvalidUserName()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             var studentDto = TestDataHelper.CreateStudentDtoInvalidName();
             ModelValidationHelper.ValidateModelState(controller, studentDto);
             var result = await controller.CreateStudent(studentDto);
@@ -255,7 +250,7 @@ namespace studentsapi.Tests
         public async Task CreateUserwithoutEmail()
         {
             var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             var studentDto = TestDataHelper.CreateStudentDtoMissingEmail();
             ModelValidationHelper.ValidateModelState(controller, studentDto);
             var result = await controller.CreateStudent(studentDto);
@@ -276,8 +271,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task CreateUserwithoutAddress()
         {
-            var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             var studentDto = TestDataHelper.CreateStudentDtoMissingAddress();
             ModelValidationHelper.ValidateModelState(controller, studentDto);
             var result = await controller.CreateStudent(studentDto);
@@ -300,7 +294,7 @@ namespace studentsapi.Tests
         public async Task CreateUserNull()
         {
             var context = GetInMemoryDbContext();
-            var controller = TestDataHelper.CreateStudentsController(_logger, context, _mapper);
+            var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             var studentDto = TestDataHelper.CreateStudentDtoNull();
             ModelValidationHelper.ValidateModelState(controller, studentDto);
             var result = await controller.CreateStudent(studentDto);
@@ -311,8 +305,6 @@ namespace studentsapi.Tests
             Assert.That(badRequestResult, Is.Not.Null, "BadRequestObjectResult was unexpectedly null.");
             _logger.LogInformation("BadRequestObjectResult: {0}", badRequestResult.Value);
         }
-
-
     }
     
 

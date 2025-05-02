@@ -14,11 +14,7 @@ namespace studentsapi.Configurations
             // Add your mappings here
             CreateMap<StudentDto, Data.Student>().ReverseMap();
             CreateMap<Model.Student, StudentDto>().ReverseMap();
-          
-
-
-
-        }
+        } 
     }
 }
 
