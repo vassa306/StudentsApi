@@ -1,7 +1,6 @@
 ﻿using AutoMapper;
 using studentsapi.Data.Configs;
 using studentsapi.DTO;
-using studentsapi.Model;
 using studentsapi.Data;
 
 namespace studentsapi.Configurations
@@ -12,7 +11,10 @@ namespace studentsapi.Configurations
         {
             // CreateMap<Source, Destination>();
             // Add your mappings here
-            CreateMap<StudentDto, Data.Student>().ReverseMap();
+            CreateMap<Student, StudentDto>()
+            .ForMember(dest => dest.DepartmentName, opt => opt.MapFrom(src => src.Department.DepartmentName))
+            .ReverseMap()
+            .ForMember(dest => dest.Department, opt => opt.Ignore());
             CreateMap<Model.Student, StudentDto>().ReverseMap();
         } 
     }

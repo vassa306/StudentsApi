@@ -5,8 +5,9 @@ using Microsoft.AspNetCore.TestHost;
 using Newtonsoft.Json;
 using NUnit.Framework;
 using studentsapi.DTO;
+using studentsapi.Tests.TestData;
 
-namespace studentsapi.Tests.TestData
+namespace studentsapi.Tests
 {
     public class CorsTest
     {

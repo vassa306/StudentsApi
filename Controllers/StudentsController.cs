@@ -43,7 +43,7 @@ namespace studentsapi.Controllers
                 return StatusCode(StatusCodes.Status406NotAcceptable, "Media type is not supported");
             }
             _logger.LogInformation("GetStudents method called.");
-            var students = await _studentRepository.GetAllAsync();
+            var students = await _studentRepository.GetAllAsync(s => ((Student)(object)s).Department);
             var studentDtos = _mapper.Map<List<StudentDto>>(students);
             return Ok(studentDtos);
         }
@@ -153,7 +153,7 @@ namespace studentsapi.Controllers
                 _logger.LogCritical($"Student not found with ID {model.Id}");
                 return NotFound();
             }
-            var newRecord = _mapper.Map<Student>(model);
+            var newRecord = _mapper.Map(model, existingStudent);
             await _studentRepository.UpdateAsync(newRecord);
             return NoContent();
         }

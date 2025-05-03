@@ -33,7 +33,35 @@ builder.Services.AddDbContext<CollegeDBContext>(options =>
 builder.Services.AddAutoMapper(typeof(AutoMapperConfig)); // Register AutoMapper with the assembly containing your profiles
 builder.Services.AddScoped(typeof(ICollegeRepository<>), typeof(CollegeRepository<>));
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
+// Add CORS policy
+builder.Services.AddCors(options => { 
 
+    options.AddDefaultPolicy(
+        policy =>
+        {
+            policy.AllowAnyOrigin()
+                .AllowAnyMethod()
+                .AllowAnyHeader();
+        });
+    options.AddPolicy("AllowOnlyLocalhost", policy =>
+    {
+        policy.WithOrigins("http://localhost:5000")
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+    options.AddPolicy("AllowSpecificOrigin", policy =>
+    {
+        policy.WithOrigins("http://google.com","http://drive.google.com")
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+    options.AddPolicy("AllowOnlyMicrosoft", policy =>
+    {
+        policy.WithOrigins("http://microsoft.com", "http://outlook.com", "http://onedrive.com")
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+});
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
@@ -44,8 +72,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors();
 app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+
 

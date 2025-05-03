@@ -37,6 +37,11 @@ namespace studentsapi.Data.Configs
                     Address = "456 Elm St, Brno"
                 }
             });
+            builder.HasOne(s => s.Department)
+                .WithMany(d => d.Students)
+                .HasForeignKey(s => s.DepartmentId)
+                .HasConstraintName("FK_Students_Department")
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }
