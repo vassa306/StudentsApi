@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Linq.Expressions;
+using System.Runtime.InteropServices;
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,8 +10,6 @@ using studentsapi.Controllers;
 using studentsapi.Data;
 using studentsapi.Data.Repository;
 using studentsapi.DTO;
-using studentsapi.Logging;
-using studentsapi.Model;
 using studentsapi.Tests.Helpers;
 using studentsapi.Tests.TestData;
 
@@ -108,7 +107,7 @@ namespace studentsapi.Tests
             var okResult = result.Result as OkObjectResult;
             Assert.That(okResult, Is.Not.Null);
             var student = okResult.Value as StudentDto;
-            _studentRepoMock.Verify(repo => repo.GetByName(It.IsAny<string>()), Times.Once);
+            _studentRepoMock.Verify(repo => repo.GetAsync(It.IsAny<Expression<Func<Student, bool>>>()), Times.Once);
             Assert.That(student, Is.Not.Null);
             Assert.That(student.Name, Is.EqualTo("John"));
 
@@ -125,7 +124,9 @@ namespace studentsapi.Tests
             var okResult = result.Result as OkObjectResult;
             Assert.That(okResult, Is.Not.Null);
             var student = okResult.Value as StudentDto;
-            _studentRepoMock.Verify(r => r.GetByIdAsync(It.IsAny<int>()), Times.Once);
+            _studentRepoMock.Verify(
+            r => r.GetAsync(It.IsAny<Expression<Func<Student, bool>>>()),
+            Times.Once);
             Assert.That(student, Is.Not.Null);
             Assert.That(student.Name, Is.EqualTo("John"));
         }
@@ -319,6 +320,8 @@ namespace studentsapi.Tests
             var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             var studentDto = TestDataHelper.CreateStudentDtoWithExistingEmail();
             ModelValidationHelper.ValidateModelState(controller, studentDto);
+            _studentRepoMock.Setup(repo => repo.Exists(It.IsAny<Expression<Func<Data.Student, bool>>>()))
+                .ReturnsAsync(true); // Simulate existing email
             var result = await controller.CreateStudent(studentDto);
             // Assert
             Assert.That(result.Result, Is.InstanceOf<ConflictObjectResult>(), "Expected ConflictObjectResult");
@@ -326,6 +329,7 @@ namespace studentsapi.Tests
             var ConflictResult = result.Result as ConflictObjectResult;
             Assert.That(ConflictResult, Is.Not.Null, "BadRequestObjectResult was unexpectedly null.");
             _logger.LogInformation("ConflictResult: {0}", ConflictResult.Value);
+
         }
         [Test]
         public async Task UpdateUserTest()

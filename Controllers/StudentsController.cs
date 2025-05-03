@@ -1,4 +1,5 @@
-﻿using AutoMapper;
+﻿using System.Xml.Linq;
+using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Primitives;
@@ -60,7 +61,7 @@ namespace studentsapi.Controllers
                 _logger.LogCritical($"Student not found with {id}");
                 return BadRequest("Invalid student ID.");
             }
-            var student = await _studentRepository.GetByIdAsync(id);
+            var student = await _studentRepository.GetAsync(student => student.Id == id);
             if (student == null)
             {
                 _logger.LogCritical($"Student not found with {id}");
@@ -77,7 +78,7 @@ namespace studentsapi.Controllers
             {
                 return BadRequest("Invalid student name.");
             }
-            var student = await _studentRepository.GetByName(name);
+            var student = await _studentRepository.GetAsync(student => student.Name == name);
             var studentDto = _mapper.Map<StudentDto>(student);
             
             if (string.IsNullOrEmpty(studentDto.Name) || string.IsNullOrEmpty(studentDto.Email) || string.IsNullOrEmpty(studentDto.Address))
@@ -93,14 +94,16 @@ namespace studentsapi.Controllers
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task <ActionResult<StudentDto>> CreateStudent([FromBody]StudentDto model)
+        public async Task<ActionResult<StudentDto>> CreateStudent([FromBody] StudentDto model)
         {
             _logger.LogInformation("CreateStudent method called.");
+
             if (!ModelState.IsValid)
             {
                 _logger.LogCritical($"Model state is invalid {model}");
                 return BadRequest(ModelState);
             }
+
             if (model == null)
             {
                 _logger.LogCritical("Model is null");
@@ -111,22 +114,23 @@ namespace studentsapi.Controllers
             {
                 return BadRequest("Name is required.");
             }
-            var existing = await _studentRepository.Exists(model);
-            if (existing != null)
+
+            // Check if student already exists
+            var exists = await _studentRepository.Exists(s => s.Email == model.Email);
+            if (exists == true)
             {
-                _logger.LogWarning("Student with email {Email} already exists.", model.Email);
                 return Conflict(new { message = "A student with this email already exists." });
             }
 
-            int newId = await _studentRepository.IncreaseId(); // Generate new ID
-            Data.Student student = _mapper.Map<Data.Student>(model);
+            var student = _mapper.Map<Student>(model);
             await _studentRepository.CreateAsync(student);
-            model.Id = newId;
+
+            model.Id = student.Id; // EF will populate this after SaveChangesAsync
 
             return CreatedAtRoute("GetStudentById", new { id = model.Id }, model);
         }
 
-        [HttpPut]
+            [HttpPut]
         [Route("update")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -143,7 +147,7 @@ namespace studentsapi.Controllers
                 _logger.LogCritical($"Model state is invalid {model}");
                 return BadRequest(ModelState);
             }
-            var existingStudent = await _studentRepository.GetByIdAsync(model.Id);
+            var existingStudent = await _studentRepository.GetAsync(student => student.Id == model.Id);
             if (existingStudent == null)
             {
                 _logger.LogCritical($"Student not found with ID {model.Id}");
@@ -166,7 +170,7 @@ namespace studentsapi.Controllers
             {
                 return BadRequest();
             }
-            var existingStudent = await _studentRepository.GetByIdAsync(id);
+            var existingStudent = await _studentRepository.GetAsync(student => student.Id == id);
             if (existingStudent == null)
             {
                 _logger.LogCritical($"Student not found with ID {id}");
@@ -191,7 +195,7 @@ namespace studentsapi.Controllers
                 _logger.LogCritical("Invalid Student ID");
                 return BadRequest("Invalid student ID.");
             }
-            var stud = await _studentRepository.GetByIdAsync(id);
+            var stud = await _studentRepository.GetAsync(student => student.Id == id);
             await _studentRepository.DeleteAsync(id);
             return NoContent();
         }

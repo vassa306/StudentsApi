@@ -8,6 +8,8 @@ using studentsapi.Data.Repository;
 using Moq;
 using System.Net;
 using System.Xml.Linq;
+using System.Linq.Expressions;
+
 
 namespace studentsapi.Tests.TestData
 {
@@ -38,21 +40,20 @@ namespace studentsapi.Tests.TestData
             mockRepository.Setup(repo => repo.GetAllAsync())
           .ReturnsAsync(students);
 
-            mockRepository.Setup(repo => repo.GetByIdAsync(It.IsAny<int>()))
-                .Returns((int id) => Task.FromResult(students.FirstOrDefault(s => s.Id == id)));
+            mockRepository.Setup(repo => repo.GetAsync(It.IsAny<Expression<Func<Student, bool>>>()))
+            .Returns((Expression<Func<Student, bool>> expr) =>
+            Task.FromResult(students.AsQueryable().FirstOrDefault(expr.Compile())));
 
-            mockRepository.Setup(repo => repo.GetByName(It.IsAny<string>()))
-                .Returns((string name) => Task.FromResult(students.FirstOrDefault(s => s.Name == name)));
-
-            mockRepository.Setup(repo => repo.Exists(It.IsAny<StudentDto>()))
-                .Returns((StudentDto dto) => Task.FromResult(students.FirstOrDefault(s => s.Email == dto.Email)));
-
-            mockRepository.Setup(repo => repo.IncreaseId())
-                .ReturnsAsync(students.Max(s => s.Id) + 1);
+            mockRepository.Setup(repo => repo.Exists(It.IsAny<Expression<Func<Student, bool>>>()))
+                .ReturnsAsync(false);
 
             mockRepository.Setup(repo => repo.CreateAsync(It.IsAny<Student>()))
-                .Callback<Student>(student => students.Add(student))
-                .ReturnsAsync((Student student) => student.Id);
+            .Callback<Student>(student =>
+            {
+                student.Id = students.Max(s => s.Id) + 1;
+                students.Add(student);
+            })
+            .ReturnsAsync((Student student) => student);
         }
         
 

@@ -5,7 +5,8 @@ using Serilog;
 using System.Reflection; // needed for AutoMapper fix
 using Microsoft.EntityFrameworkCore;
 using studentsapi.Data;
-using studentsapi.Configurations; // where your AutoMapper Profile(s) live
+using studentsapi.Configurations;
+using studentsapi.Data.Repository; // where your AutoMapper Profile(s) live
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +31,9 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<CollegeDBContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddAutoMapper(typeof(AutoMapperConfig)); // Register AutoMapper with the assembly containing your profiles
+builder.Services.AddScoped(typeof(ICollegeRepository<>), typeof(CollegeRepository<>));
+builder.Services.AddScoped<IStudentRepository, StudentRepository>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
