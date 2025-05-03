@@ -32,13 +32,23 @@ namespace studentsapi.Tests.TestData
 
         public static void SeedStudentsMock(Mock<IStudentRepository> mockRepository)
         {
+            var departments = new List<Department>
+            {
+                new Department { Id = 1, DepartmentName = "IT", Description = "IT dept" },
+                new Department { Id = 2, DepartmentName = "Math", Description = "Math dept" }
+            };
+
             var students = new List<Student>
-        {
-            new Student { Id = 1, Name = "John", Email = "john@email.com", Address = "123 Main St" },
-            new Student { Id = 2, Name = "Kate", Email = "kate@email.com", Address = "456 Elm St" }
-        };
-            mockRepository.Setup(repo => repo.GetAllAsync())
-          .ReturnsAsync(students);
+            {
+            new Student { Id = 1, Name = "John", Email = "john@email.com", Address = "123 Main St", DepartmentId = 1,  Department = departments.First(d => d.Id == 1)},
+            new Student { Id = 2, Name = "Kate", Email = "kate@email.com", Address = "456 Elm St", DepartmentId = 2, Department = departments.First(d => d.Id == 2) }
+            };
+
+
+            mockRepository
+            .Setup(repo => repo.GetAllAsync(It.IsAny<Expression<Func<Student, object>>[]>()))
+            .ReturnsAsync(students);
+
 
             mockRepository.Setup(repo => repo.GetAsync(It.IsAny<Expression<Func<Student, bool>>>()))
             .Returns((Expression<Func<Student, bool>> expr) =>
@@ -48,14 +58,16 @@ namespace studentsapi.Tests.TestData
                 .ReturnsAsync(false);
 
             mockRepository.Setup(repo => repo.CreateAsync(It.IsAny<Student>()))
-            .Callback<Student>(student =>
-            {
-                student.Id = students.Max(s => s.Id) + 1;
-                students.Add(student);
-            })
-            .ReturnsAsync((Student student) => student);
+               .Callback<Student>(student =>
+               {
+                   student.Id = students.Max(s => s.Id) + 1;
+                   // Optional: assign department again if needed
+                   student.Department = departments.FirstOrDefault(d => d.Id == student.DepartmentId);
+                   students.Add(student);
+               })
+               .ReturnsAsync((Student student) => student);
         }
-        
+
 
         public static StudentsController CreateStudentsController(ILogger<StudentsController> logger, IMapper mapper, Mock<IStudentRepository> mockRepository)
         {
@@ -66,6 +78,7 @@ namespace studentsapi.Tests.TestData
                 HttpContext = new DefaultHttpContext()
             };
             controller.ControllerContext.HttpContext.Request.Headers["Accept"] = "application/json";
+            controller.ControllerContext.HttpContext.Request.Headers["Access-Control-Allow-Origin"]= "http://localhost:5000";
 
             return controller;
         }
@@ -89,7 +102,9 @@ namespace studentsapi.Tests.TestData
             {
                 Name = name,
                 Email = email,
-                Address = address
+                Address = address,
+                DepartmentId = 1
+
             };
         }
 
@@ -157,7 +172,7 @@ namespace studentsapi.Tests.TestData
             };
         }
 
-        internal static StudentDto? GetExistingDto(int id = 1 ,string name = "John", string email = "john@email.com", string address = "123 Main St" )
+        internal static StudentDto? GetExistingDto(int id = 1 ,string name = "vasik", string email = "vasik@email.com", string address = "123 Main St", int DepartmentId = 1)
         {
             return new StudentDto
             {
@@ -165,6 +180,7 @@ namespace studentsapi.Tests.TestData
                 Name = name,
                 Email = email,
                 Address = address
+
             };
         }
     }

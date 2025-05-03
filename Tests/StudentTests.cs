@@ -44,9 +44,10 @@ namespace studentsapi.Tests
         public async Task GetStudents_ReturnsAllStudentsTest()
         {
             var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
+
             // Act  
             var result = await controller.GetStudents();
-
+            
             // Assert  
             Assert.That(result.Result, Is.InstanceOf<OkObjectResult>());
 
@@ -57,7 +58,13 @@ namespace studentsapi.Tests
             Assert.That(students, Is.Not.Null);
             Assert.That(students.Count(), Is.EqualTo(2));
             Assert.That(students.First().Id, Is.EqualTo(1));
-            _studentRepoMock.Verify(repo => repo.GetAllAsync(), Times.Once);
+            Assert.That(students.First().Name, Is.EqualTo("John"));
+            Assert.That(students.First().DepartmentId, Is.EqualTo(1));
+            Assert.That(students.First().DepartmentName, Is.EqualTo("IT"));
+            Assert.That(students.Last().Id, Is.EqualTo(2));
+            Assert.That(students.Last().Name, Is.EqualTo("Kate"));
+            Assert.That(students.Last().DepartmentId, Is.EqualTo(2));
+            _studentRepoMock.Verify(repo => repo.GetAllAsync(s => ((Student)(object)s).Department), Times.Once);
         }
 
         [Test]
@@ -78,7 +85,7 @@ namespace studentsapi.Tests
             Assert.That(students, Is.Not.Null);
             Assert.That(students.Count(), Is.EqualTo(2));
             Assert.That(students.First().Id, Is.EqualTo(1));
-            _studentRepoMock.Verify(repo => repo.GetAllAsync(), Times.Once);
+            _studentRepoMock.Verify(repo => repo.GetAllAsync(s => ((Student)(object)s).Department), Times.Once);
         }
 
         [Test]
@@ -110,6 +117,8 @@ namespace studentsapi.Tests
             _studentRepoMock.Verify(repo => repo.GetAsync(It.IsAny<Expression<Func<Student, bool>>>()), Times.Once);
             Assert.That(student, Is.Not.Null);
             Assert.That(student.Name, Is.EqualTo("John"));
+            Assert.That(student.DepartmentName, Is.EqualTo("IT"));
+            Console.WriteLine($"Student: {student.Name}, {student.Address}, {student.DepartmentName}");
 
         }
 
@@ -185,13 +194,16 @@ namespace studentsapi.Tests
 
             var createdStudent = createdAtRouteResult.Value as StudentDto;
             Assert.That(createdStudent, Is.Not.Null);
+            Assert.That(createdStudent.Name, Is.Not.Null);
             Assert.That(createdStudent.Name, Is.EqualTo(studentDto.Name));
+            Assert.That(createdStudent.Name, Is.Not.Empty);
             Assert.That(createdStudent.Email, Is.EqualTo(studentDto.Email));
             Assert.That(createdStudent.Address, Is.EqualTo(studentDto.Address));
             Assert.That(createdStudent.Id, Is.GreaterThan(0));
-            Console.WriteLine($"Created student ID: {createdStudent.Id} , {createdStudent.Name}, {createdStudent.Address}");
+            Assert.That(createdStudent.DepartmentId, Is.EqualTo(studentDto.DepartmentId));
+            Console.WriteLine($"Created student ID: {createdStudent.Id} , {createdStudent.Name}, {createdStudent.Address}, {createdStudent.DepartmentId}");
             // Optional: ověření, že mock skutečně zavolal CreateAsync
-            _studentRepoMock.Verify(r => r.CreateAsync(It.Is<Data.Student>(
+            _studentRepoMock.Verify(r => r.CreateAsync(It.Is<Student>(
                 s => s.Email == studentDto.Email && s.Name == studentDto.Name)), Times.Once);
         }
 
@@ -320,7 +332,7 @@ namespace studentsapi.Tests
             var controller = TestDataHelper.CreateStudentsController(_logger, _mapper, _studentRepoMock);
             var studentDto = TestDataHelper.CreateStudentDtoWithExistingEmail();
             ModelValidationHelper.ValidateModelState(controller, studentDto);
-            _studentRepoMock.Setup(repo => repo.Exists(It.IsAny<Expression<Func<Data.Student, bool>>>()))
+            _studentRepoMock.Setup(repo => repo.Exists(It.IsAny<Expression<Func<Student, bool>>>()))
                 .ReturnsAsync(true); // Simulate existing email
             var result = await controller.CreateStudent(studentDto);
             // Assert
@@ -338,14 +350,19 @@ namespace studentsapi.Tests
             var studentDto = TestDataHelper.GetExistingDto();
             var result = await controller.UpdateStudent(studentDto.Id, studentDto);
             // Assert
-            Assert.That(result, Is.InstanceOf<NoContentResult>(), "Expected NoContentResult.");
-            _studentRepoMock.Verify(repo => repo.UpdateAsync(It.Is<Data.Student>(
-    s => s.Id == studentDto.Id &&
-         s.Name == studentDto.Name &&
-         s.Email == studentDto.Email &&
-         s.Address == studentDto.Address
-)), Times.Once);
+            Assert.That(result, Is.InstanceOf<NoContentResult>(), "Expected NoContentResult");
+            var noContentResult = result as NoContentResult;
+            Assert.That(noContentResult, Is.Not.Null, "NoContentResult was unexpectedly null.");
+            _studentRepoMock.Verify(repo => repo.UpdateAsync(It.Is<Student>(
+                s => s.Id == studentDto.Id &&
+                     s.Name == studentDto.Name &&
+                     s.Email == studentDto.Email &&
+                     s.Address == studentDto.Address
+
+)           ), Times.Once);
         }
+
+
 
         [Test]
         public async Task UpdateUserTestWithInvalidData()
@@ -371,7 +388,8 @@ namespace studentsapi.Tests
             Assert.That(errorMessages[0], Is.EqualTo("The Name field is required."), "Unexpected error message for Name.");
 
             // Ensure that update was never called
-            _studentRepoMock.Verify(repo => repo.UpdateAsync(It.IsAny<Data.Student>()), Times.Never);
+            _studentRepoMock.Verify(repo => repo.UpdateAsync(It.IsAny<Student>()), Times.Never);
+            
         }
     }
     
