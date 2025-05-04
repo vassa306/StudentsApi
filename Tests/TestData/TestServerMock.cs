@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.TestHost;
+﻿using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using studentsapi.Configurations;
 using studentsapi.Data;
@@ -8,24 +9,16 @@ namespace studentsapi.Tests.TestData
 {
     public class TestServerMock
     {
-        public static HttpClient CreateClientWithCorsPolicy(string policyName)
+        public static HttpClient CreateClientWithCorsPolicy(string policyName, bool authorized)
         {
             var builder = new WebHostBuilder()
                 .ConfigureServices(services =>
                 {
-                    // Add CORS policies
                     services.AddCors(options =>
                     {
                         options.AddPolicy("AllowOnlyLocalhost", policy =>
                         {
                             policy.WithOrigins("http://localhost:5000")
-                                  .AllowAnyHeader()
-                                  .AllowAnyMethod();
-                        });
-
-                        options.AddPolicy("AllowOnlyMicrosoft", policy =>
-                        {
-                            policy.WithOrigins("http://microsoft.com")
                                   .AllowAnyHeader()
                                   .AllowAnyMethod();
                         });
@@ -38,29 +31,44 @@ namespace studentsapi.Tests.TestData
                         });
                     });
 
-                    // Add services
                     services.AddAutoMapper(typeof(AutoMapperConfig));
                     services.AddScoped(typeof(ICollegeRepository<>), typeof(CollegeRepository<>));
                     services.AddScoped<IStudentRepository, StudentRepository>();
-
-                    // Add in-memory DB
                     services.AddDbContext<CollegeDBContext>(options =>
                         options.UseInMemoryDatabase("TestDb"));
 
                     services.AddControllers();
+
+                    if (authorized)
+                    {
+                        services.AddAuthentication("Test")
+                                .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Local", null);
+
+                        services.AddAuthorization(options =>
+                        {
+                            options.AddPolicy("AdminPolicy", policy => policy.RequireRole("Admin"));
+                        });
+                    }
                 })
                 .Configure(app =>
                 {
                     app.UseRouting();
-                    app.UseCors(policyName); // Apply CORS policy
+                    app.UseCors(policyName);
+
+                    if (authorized)
+                    {
+                        app.UseAuthentication();
+                        app.UseAuthorization();
+                    }
+
                     app.UseEndpoints(endpoints =>
                     {
                         endpoints.MapControllers();
                     });
 
-                    // Seed data using IApplicationBuilder services
                     using var scope = app.ApplicationServices.CreateScope();
                     var dbContext = scope.ServiceProvider.GetRequiredService<CollegeDBContext>();
+
                     dbContext.Departments.RemoveRange(dbContext.Departments);
                     dbContext.Students.RemoveRange(dbContext.Students);
 
@@ -78,7 +86,9 @@ namespace studentsapi.Tests.TestData
                 });
 
             var server = new TestServer(builder);
-            return server.CreateClient();
+            var client = server.CreateClient();
+
+            return client;
         }
     }
 }

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.TestHost;
 using Newtonsoft.Json;
 using NUnit.Framework;
 using studentsapi.DTO;
+using studentsapi.Model;
 using studentsapi.Tests.TestData;
 
 namespace studentsapi.Tests
@@ -18,7 +19,7 @@ namespace studentsapi.Tests
         public void Setup()
         {
             // Fix for CS0029 and CS1002: Correctly initialize _client instead of _server
-            _client = TestServerMock.CreateClientWithCorsPolicy("AllowAll");
+            _client = TestServerMock.CreateClientWithCorsPolicy("AllowAll", true);
         }
 
         [Test]
@@ -61,8 +62,10 @@ namespace studentsapi.Tests
         [Test]
         public async Task GetAllStudents_Should_Return_OK_And_StudentList()
         {
-            // Arrange
             var request = new HttpRequestMessage(HttpMethod.Get, "/api/Students/All");
+            request.Headers.Add("Authorization", "Bearer admin-token");
+            // Arrange
+
 
             // Act
             var response = await _client.SendAsync(request);
@@ -73,7 +76,11 @@ namespace studentsapi.Tests
             var responseBody = await response.Content.ReadAsStringAsync();
             Assert.That(responseBody, Is.Not.Null.And.Not.Empty, "Expected response body to contain data");
 
-            var students = JsonConvert.DeserializeObject<List<StudentDto>>(responseBody);
+            var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(responseBody);
+            Assert.That(apiResponse, Is.Not.Null);
+            Assert.That(apiResponse.Status, Is.True);
+
+            var students = JsonConvert.DeserializeObject<List<StudentDto>>(apiResponse.Data.ToString());
             Assert.That(students, Is.Not.Null.And.Not.Empty, "Expected at least one student");
         }
 
@@ -92,11 +99,37 @@ namespace studentsapi.Tests
         }
 
         [Test]
+        public async Task Get_should_be_Unauthorized()
+        {
+            _client = TestServerMock.CreateClientWithCorsPolicy("AllowOnlyLocalhost", true);
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/Students/All");
+            request.Headers.Add("Origin", "http://localhost:5000");
+            request.Headers.Add("Access-Control-Request-Method", "GET");
+            // Act
+            var response = await _client.SendAsync(request);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized), "Expected 401 Unauthorized");
+        }
+        [Test]
+        public async Task Get_should_be_403()
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, "/api/Students/All");
+            request.Headers.Add("Origin", "http://localhost:5000");
+            request.Headers.Add("Access-Control-Request-Method", "GET");
+            request.Headers.Add("Authorization", "Bearer manager-token");
+            // Act
+            var response = await _client.SendAsync(request);
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden), "Expected 403 forbidden");
+        }
+
+
+
+
+        [Test]
         public async Task PostStudent_Should_Return_Created_And_CORS_Header()
         {
 
             
-            _client = TestServerMock.CreateClientWithCorsPolicy("AllowAll");
+            _client = TestServerMock.CreateClientWithCorsPolicy("AllowAll", true);
             // Arrange
             var student = new
             {
@@ -112,6 +145,7 @@ namespace studentsapi.Tests
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
             request.Headers.Add("Origin", "*");
+            request.Headers.Add("Authorization", "Bearer admin-token");
             var response = await _client.SendAsync(request);
 
             // Assert
@@ -126,7 +160,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task Should_Allow_Only_Specific_Origins()
         {
-            _client = TestServerMock.CreateClientWithCorsPolicy("AllowOnlyLocalhost");
+            _client = TestServerMock.CreateClientWithCorsPolicy("AllowOnlyLocalhost", true);
             // Arrange
             var request = new HttpRequestMessage(HttpMethod.Options, "/api/students");
             request.Headers.Add("Origin", "http://localhost:5000");
@@ -141,7 +175,7 @@ namespace studentsapi.Tests
         [Test]
         public async Task Should_Reject_Unknown_Origins()
         {
-            _client = TestServerMock.CreateClientWithCorsPolicy("AllowOnlyLocalhost");
+            _client = TestServerMock.CreateClientWithCorsPolicy("AllowOnlyLocalhost", true);
             // Arrange
             var request = new HttpRequestMessage(HttpMethod.Options, "/api/students");
             request.Headers.Add("Origin", "http://unknown-origin.com");

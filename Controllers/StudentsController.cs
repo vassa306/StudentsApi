@@ -1,5 +1,7 @@
-﻿using System.Xml.Linq;
+﻿using System.Net;
+using System.Xml.Linq;
 using AutoMapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Primitives;
@@ -14,6 +16,7 @@ namespace studentsapi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize(AuthenticationSchemes = "Local", Roles = "Admin")]
 
     public class StudentsController : ControllerBase
     {
@@ -21,12 +24,14 @@ namespace studentsapi.Controllers
         private readonly ILogger<StudentsController> _logger;
         private readonly IMapper _mapper;
         private readonly IStudentRepository _studentRepository;
+        private ApiResponse _apiResponse;
 
         public StudentsController(ILogger<StudentsController> logger, IMapper mapper, IStudentRepository studentRepository)
         {
             _logger = logger;
             _mapper = mapper;
             _studentRepository = studentRepository;
+            _apiResponse = new ApiResponse();
         }
 
         [HttpGet]
@@ -34,18 +39,32 @@ namespace studentsapi.Controllers
         [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status406NotAcceptable)]
-        public async Task <ActionResult<IEnumerable<StudentDto>>> GetStudents()
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task <ActionResult<ApiResponse>> GetStudents()
         {
-            var acceptHeaders = Request.Headers.Accept;
-            if (!StringValues.IsNullOrEmpty(acceptHeaders) && acceptHeaders.Contains("text/plain"))
+            try
             {
-                // Client wants XML
-                return StatusCode(StatusCodes.Status406NotAcceptable, "Media type is not supported");
+                var acceptHeaders = Request.Headers.Accept;
+                if (!StringValues.IsNullOrEmpty(acceptHeaders) && acceptHeaders.Contains("text/plain"))
+                {
+                    // Client wants XML
+                    return StatusCode(StatusCodes.Status406NotAcceptable, "Media type is not supported");
+                }
+                _logger.LogInformation("GetStudents method called.");
+                var students = await _studentRepository.GetAllAsync(s => ((Student)(object)s).Department);
+                _apiResponse.Data = _mapper.Map<List<StudentDto>>(students);
+                _apiResponse.Status = true;
+                _apiResponse.StatusCode = HttpStatusCode.OK;
+                return Ok(_apiResponse);
+            }catch(Exception ex)
+            {
+                _apiResponse.Errors.Add(ex.Message);
+                _apiResponse.StatusCode = HttpStatusCode.InternalServerError;
+                _apiResponse.Status = false;
+                return _apiResponse;
+
             }
-            _logger.LogInformation("GetStudents method called.");
-            var students = await _studentRepository.GetAllAsync(s => ((Student)(object)s).Department);
-            var studentDtos = _mapper.Map<List<StudentDto>>(students);
-            return Ok(studentDtos);
         }
 
         [HttpGet]
@@ -53,81 +72,123 @@ namespace studentsapi.Controllers
         [Produces("application/json")]
         [ProducesResponseType(typeof(Model.Student), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task  <ActionResult<IEnumerable<StudentDto>>> GetStudent(int id)
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task  <ActionResult<ApiResponse>> GetStudent(int id)
         {
-            _logger.LogInformation("GetStudent method called.");
-            if (id <= 0)
+            try
             {
-                _logger.LogCritical($"Student not found with {id}");
-                return BadRequest("Invalid student ID.");
+                _logger.LogInformation("GetStudent method called.");
+                if (id <= 0)
+                {
+                    _logger.LogCritical($"Student not found with {id}");
+                    return BadRequest("Invalid student ID.");
+                }
+                var student = await _studentRepository.GetAsync(student => student.Id == id);
+                if (student == null)
+                {
+                    _logger.LogCritical($"Student not found with {id}");
+                    return NotFound("No students found.");
+                }
+                _apiResponse.Data = _mapper.Map<StudentDto>(student);
+                _apiResponse.Status = true;
+                _apiResponse.StatusCode = HttpStatusCode.OK;
+
+                return Ok(_apiResponse);
             }
-            var student = await _studentRepository.GetAsync(student => student.Id == id);
-            if (student == null)
+            catch (Exception ex)
             {
-                _logger.LogCritical($"Student not found with {id}");
-                return NotFound("No students found.");
+                _apiResponse.Errors.Add(ex.Message);
+                _apiResponse.StatusCode = HttpStatusCode.InternalServerError;
+                _apiResponse.Status = false;
+                return _apiResponse;
             }
-            var studentDto = _mapper.Map<StudentDto>(student);
-            return Ok(studentDto);
+            
         }
 
         [HttpGet("{name:alpha}", Name = "GetStudentByName")]
-        public async Task <ActionResult<IEnumerable<Model.Student>>> GetStudentByName(string name)
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task <ActionResult<ApiResponse>> GetStudentByName(string name)
         {
-            if (string.IsNullOrEmpty(name))
+            try
             {
-                return BadRequest("Invalid student name.");
-            }
-            var student = await _studentRepository.GetAsync(student => student.Name == name);
-            var studentDto = _mapper.Map<StudentDto>(student);
-            
-            if (string.IsNullOrEmpty(studentDto.Name) || string.IsNullOrEmpty(studentDto.Email) || string.IsNullOrEmpty(studentDto.Address))
-            {
-                return BadRequest("Student data is incomplete.");
-            }
-            return Ok(studentDto);
-        }
+                if (string.IsNullOrEmpty(name))
+                {
+                    return BadRequest("Invalid student name.");
+                }
+                var student = await _studentRepository.GetAsync(student => student.Name == name);
+                _apiResponse.Data = _mapper.Map<StudentDto>(student);
+                _apiResponse.Status = true;
+                _apiResponse.StatusCode = HttpStatusCode.OK;
 
+                return Ok(_apiResponse);
+            }
+            catch (Exception ex)
+            {
+                _apiResponse.Errors.Add(ex.Message);
+                _apiResponse.StatusCode = HttpStatusCode.InternalServerError;
+                _apiResponse.Status = false;
+                return _apiResponse;
+            }
+            
+        }
 
         [HttpPost]
         [Route("create")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult<StudentDto>> CreateStudent([FromBody] StudentDto model)
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<ActionResult<ApiResponse>> CreateStudent([FromBody] StudentDto model)
         {
-            _logger.LogInformation("CreateStudent method called.");
-
-            if (!ModelState.IsValid)
+            try
             {
-                _logger.LogCritical($"Model state is invalid {model}");
-                return BadRequest(ModelState);
-            }
+                _logger.LogInformation("CreateStudent method called.");
 
-            if (model == null)
+                if (!ModelState.IsValid)
+                {
+                    _logger.LogCritical($"Model state is invalid {model}");
+                    return BadRequest(ModelState);
+                }
+
+                if (model == null)
+                {
+                    _logger.LogCritical("Model is null");
+                    return BadRequest(ModelState);
+                }
+
+                if (string.IsNullOrWhiteSpace(model.Name))
+                {
+                    return BadRequest("Name is required.");
+                }
+
+                // Check if student already exists
+                var exists = await _studentRepository.Exists(s => s.Email == model.Email);
+                if (exists == true)
+                {
+                    return Conflict(new { message = "A student with this email already exists." });
+                }
+
+                var student = _mapper.Map<Student>(model);
+                await _studentRepository.CreateAsync(student);
+
+                model.Id = student.Id; // EF will populate this after SaveChangesAsync
+                _apiResponse.Data = model;
+                _apiResponse.Status = true;
+                _apiResponse.StatusCode = HttpStatusCode.Created;
+                _logger.LogInformation($"Student created with ID {model.Id}");
+                return CreatedAtRoute("GetStudentById", new { id = model.Id }, _apiResponse);
+            }
+            catch (Exception ex)
             {
-                _logger.LogCritical("Model is null");
-                return BadRequest(ModelState);
+                _apiResponse.Errors.Add(ex.Message);
+                _apiResponse.StatusCode = HttpStatusCode.InternalServerError;
+                _apiResponse.Status = false;
+                return _apiResponse;
             }
-
-            if (string.IsNullOrWhiteSpace(model.Name))
-            {
-                return BadRequest("Name is required.");
-            }
-
-            // Check if student already exists
-            var exists = await _studentRepository.Exists(s => s.Email == model.Email);
-            if (exists == true)
-            {
-                return Conflict(new { message = "A student with this email already exists." });
-            }
-
-            var student = _mapper.Map<Student>(model);
-            await _studentRepository.CreateAsync(student);
-
-            model.Id = student.Id; // EF will populate this after SaveChangesAsync
-
-            return CreatedAtRoute("GetStudentById", new { id = model.Id }, model);
+            
         }
 
             [HttpPut]
@@ -135,27 +196,40 @@ namespace studentsapi.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task <ActionResult> UpdateStudent(int v, [FromBody]StudentDto model)
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task <ActionResult<ApiResponse>> UpdateStudent(int v, [FromBody]StudentDto model)
         {
-            _logger.LogInformation("UpdateStudent method called.");
-            if (model == null || model.Id <= 0)
+            try
             {
-                return BadRequest();
+                _logger.LogInformation("UpdateStudent method called.");
+                if (model == null || model.Id <= 0)
+                {
+                    return BadRequest();
+                }
+                if (!ModelState.IsValid)
+                {
+                    _logger.LogCritical($"Model state is invalid {model}");
+                    return BadRequest(ModelState);
+                }
+                var existingStudent = await _studentRepository.GetAsync(student => student.Id == model.Id);
+                if (existingStudent == null)
+                {
+                    _logger.LogCritical($"Student not found with ID {model.Id}");
+                    return NotFound();
+                }
+                var newRecord = _mapper.Map(model, existingStudent);
+                await _studentRepository.UpdateAsync(newRecord);
+                return NoContent();
             }
-            if (!ModelState.IsValid)
+            catch (Exception ex)
             {
-                _logger.LogCritical($"Model state is invalid {model}");
-                return BadRequest(ModelState);
+                _apiResponse.Errors.Add(ex.Message);
+                _apiResponse.StatusCode = HttpStatusCode.InternalServerError;
+                _apiResponse.Status = false;
+                return _apiResponse;
             }
-            var existingStudent = await _studentRepository.GetAsync(student => student.Id == model.Id);
-            if (existingStudent == null)
-            {
-                _logger.LogCritical($"Student not found with ID {model.Id}");
-                return NotFound();
-            }
-            var newRecord = _mapper.Map(model, existingStudent);
-            await _studentRepository.UpdateAsync(newRecord);
-            return NoContent();
+
         }
 
         [HttpPatch]
@@ -163,41 +237,68 @@ namespace studentsapi.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult> UpdateStudentPartialAsync(int id, [FromBody] Microsoft.AspNetCore.JsonPatch.JsonPatchDocument<StudentDto> patchDoc)
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<ActionResult<ApiResponse>> UpdateStudentPartialAsync(int id, [FromBody] Microsoft.AspNetCore.JsonPatch.JsonPatchDocument<StudentDto> patchDoc)
         {
-            _logger.LogInformation("UpdateStudentPartial method called.");
-            if (patchDoc == null)
+            try
             {
-                return BadRequest();
+                _logger.LogInformation("UpdateStudentPartial method called.");
+                if (patchDoc == null)
+                {
+                    return BadRequest();
+                }
+                var existingStudent = await _studentRepository.GetAsync(student => student.Id == id);
+                if (existingStudent == null)
+                {
+                    _logger.LogCritical($"Student not found with ID {id}");
+                    return NotFound();
+                }
+
+                var studentDto = _mapper.Map<StudentDto>(existingStudent);
+                patchDoc.ApplyTo(studentDto, ModelState);
+                existingStudent = _mapper.Map<Student>(studentDto);
+                await _studentRepository.UpdateAsync(existingStudent);
+
+                return NoContent();
             }
-            var existingStudent = await _studentRepository.GetAsync(student => student.Id == id);
-            if (existingStudent == null)
+            catch (Exception ex)
             {
-                _logger.LogCritical($"Student not found with ID {id}");
-                return NotFound();
+                _apiResponse.Errors.Add(ex.Message);
+                _apiResponse.StatusCode = HttpStatusCode.InternalServerError;
+                _apiResponse.Status = false;
+                return _apiResponse;
+
             }
-
-            var studentDto = _mapper.Map<StudentDto>(existingStudent);
-            patchDoc.ApplyTo(studentDto, ModelState);
-            existingStudent = _mapper.Map<Student>(studentDto);
-            await _studentRepository.UpdateAsync(existingStudent);
-
-            return NoContent();
+            
         }
 
         [HttpDelete]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [Route("{id}", Name = "DeleteStudentById")]
-        public async Task<IActionResult> DeleteStudentAsync(int id)
+        public async Task<ActionResult<ApiResponse>> DeleteStudentAsync(int id)
         {
-            _logger.LogInformation("DeleteStudent method called.");
-            if (id <= 0)
+            try
             {
-                _logger.LogCritical("Invalid Student ID");
-                return BadRequest("Invalid student ID.");
+                _logger.LogInformation("DeleteStudent method called.");
+                if (id <= 0)
+                {
+                    _logger.LogCritical("Invalid Student ID");
+                    return BadRequest("Invalid student ID.");
+                }
+                var stud = await _studentRepository.GetAsync(student => student.Id == id);
+                await _studentRepository.DeleteAsync(id);
+                return NoContent();
             }
-            var stud = await _studentRepository.GetAsync(student => student.Id == id);
-            await _studentRepository.DeleteAsync(id);
-            return NoContent();
+            catch (Exception ex)
+            {
+                _apiResponse.Errors.Add(ex.Message);
+                _apiResponse.StatusCode = HttpStatusCode.InternalServerError;
+                _apiResponse.Status = false;
+                return _apiResponse;
+            }
+           
         }
     }
 }
